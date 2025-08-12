@@ -1,35 +1,40 @@
 // pages/api/stylize.js
+export const config = {
+  api: {
+    bodyParser: { sizeLimit: '10mb' },
+  },
+};
+
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).end("Method Not Allowed");
+  if (req.method !== "POST") {
+    return res.status(405).end("Method Not Allowed");
+  }
 
   const { image, style } = req.body;
-  if (!image || !style) return res.status(400).json({ error: "Missing image or style" });
+  if (!image || !style) {
+    return res.status(400).json({ error: "Content or style image missing" });
+  }
 
   try {
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/maze/FastStyleTransfer",
+    const hfResp = await fetch(
+      "https://georgescutelnicu-neural-style-transfer.hf.space/run/predict",
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.HUGGINGFACE_API_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: { image: image, style_image: style } }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: [image, style] }),
       }
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HF API Error: ${errorText}`);
+    if (!hfResp.ok) {
+      throw new Error(`Space API error: ${await hfResp.text()}`);
     }
 
-    const resultBuffer = await response.arrayBuffer();
-    const base64 = Buffer.from(resultBuffer).toString("base64");
-    const outputDataUrl = `data:image/jpeg;base64,${base64}`;
+    const result = await hfResp.json();
+    const outputUrl = result.data[0]; // Gradio Space returns an array with the image data
 
-    return res.status(200).json({ output: outputDataUrl });
+    res.status(200).json({ output: outputUrl });
   } catch (err) {
-    console.error("Error calling HF API:", err);
-    return res.status(500).json({ error: err.message });
+    console.error("Stylize handler error:", err);
+    res.status(500).json({ error: err.message });
   }
 }
